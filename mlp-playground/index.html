@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MLP 参数学习可视化实验台</title>
+<style>
+  :root{
+    --bg:#f5f6fa; --card:#ffffff; --ink:#1f2937; --sub:#6b7280;
+    --line:#e5e7eb; --accent:#2563eb; --red:#e74c3c; --blue:#3b82f6;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;line-height:1.6}
+  header{max-width:1280px;margin:0 auto;padding:28px 20px 8px}
+  header h1{font-size:26px;letter-spacing:1px}
+  header p{color:var(--sub);margin-top:6px;font-size:14px}
+  .layout{max-width:1280px;margin:14px auto 40px;padding:0 20px;display:grid;grid-template-columns:290px 1fr 1fr;gap:14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+  .card h2{font-size:15px;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+  .card h2 .tag{font-size:11px;font-weight:400;color:var(--sub)}
+  .sidebar{grid-row:span 2}
+  .field{margin-bottom:14px}
+  .field label{display:block;font-size:13px;color:var(--sub);margin-bottom:4px}
+  .field select,.field input[type=text]{width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:8px;font-size:14px;background:#fff}
+  .field input[type=range]{width:100%}
+  .val{float:right;color:var(--accent);font-variant-numeric:tabular-nums}
+  .btns{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 14px}
+  button{cursor:pointer;border:1px solid var(--line);background:#fff;border-radius:8px;padding:8px 14px;font-size:14px;transition:.15s}
+  button:hover{border-color:var(--accent);color:var(--accent)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{background:#1d4ed8;color:#fff}
+  .stats{background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:13px}
+  .stats div{display:flex;justify-content:space-between;padding:2px 0}
+  .stats b{font-variant-numeric:tabular-nums}
+  canvas{display:block;width:100%;border-radius:8px}
+  #cvBoundary{cursor:crosshair;background:#fff;border:1px solid var(--line)}
+  #cvNet,#cvLoss{background:#fff;border:1px solid var(--line)}
+  .paint-on{border-color:var(--accent)!important;color:var(--accent)!important;background:#eff6ff!important}
+  #banner{position:fixed;top:18px;left:50%;transform:translateX(-50%) translateY(-90px);background:#111827;color:#f9fafb;padding:10px 22px;border-radius:10px;font-size:14px;z-index:30;transition:transform .35s ease;box-shadow:0 6px 20px rgba(0,0,0,.25)}
+  #banner.show{transform:translateX(-50%) translateY(0)}
+  .hint{font-size:12px;color:var(--sub);margin-top:8px}
+  .legend{font-size:12px;color:var(--sub);margin-top:6px;display:flex;gap:16px;flex-wrap:wrap}
+  .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:middle}
+  #tooltip{position:fixed;display:none;background:#111827;color:#f9fafb;font-size:12px;padding:8px 10px;border-radius:8px;pointer-events:none;max-width:260px;z-index:10;box-shadow:0 4px 12px rgba(0,0,0,.25);font-variant-numeric:tabular-nums}
+  #probeTable{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+  #probeTable th,#probeTable td{border-bottom:1px solid var(--line);padding:5px 6px;text-align:left}
+  #probeTable th{color:var(--sub);font-weight:500}
+  .probe-empty{color:var(--sub);font-size:13px;padding:20px 0;text-align:center}
+  .theory{grid-column:1/-1}
+  .theory h3{font-size:14px;margin:14px 0 6px;color:var(--ink)}
+  .theory p{font-size:14px;color:#374151;margin-bottom:8px}
+  .formula{background:#f8fafc;border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;padding:10px 14px;font-family:Consolas,"Courier New",monospace;font-size:13.5px;margin:8px 0;overflow-x:auto;white-space:nowrap}
+  footer{max-width:1280px;margin:0 auto 30px;padding:0 20px;color:var(--sub);font-size:12px;text-align:center}
+  @media(max-width:1024px){.layout{grid-template-columns:1fr}.sidebar{grid-row:auto}}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🧠 MLP 参数学习可视化实验台</h1>
+  <p>纯 JavaScript 手写多层感知机：前向传播 → 交叉熵损失 → 反向传播 → 梯度下降。点击「开始训练」，亲眼看着参数一步步学习、决策边界一点点成形。</p>
+</header>
+
+<div class="layout">
+
+  <!-- ============ 控制面板 ============ -->
+  <div class="card sidebar">
+    <h2>🎛️ 控制面板</h2>
+
+    <div class="field">
+      <label>数据集（二分类）</label>
+      <select id="selData">
+        <option value="circle">同心圆（线性不可分）</option>
+        <option value="xor">异或 XOR</option>
+        <option value="moon">双月牙</option>
+        <option value="spiral">双螺旋（最难）</option>
+        <option value="custom">✏️ 我来画数据（自定义）</option>
+      </select>
+    </div>
+
+    <div class="field" id="paintPanel" style="display:none">
+      <label>画笔（左键选中类 / 右键画另一类）</label>
+      <div class="btns" style="margin:0">
+        <button id="btnPaintRed" class="paint-on">🔴 类别 1</button>
+        <button id="btnPaintBlue">🔵 类别 0</button>
+        <button id="btnClearPts">🗑 清空</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>数据噪声 <span class="val" id="noiseVal">0.06</span></label>
+      <input type="range" id="rngNoise" min="0" max="0.2" step="0.01" value="0.06">
+    </div>
+
+    <div class="field">
+      <label>隐藏层结构（逗号分隔，如 6 或 6,4）</label>
+      <input type="text" id="txtArch" value="6">
+    </div>
+
+    <div class="field">
+      <label>隐藏层激活函数</label>
+      <select id="selAct">
+        <option value="tanh">tanh</option>
+        <option value="relu">ReLU</option>
+        <option value="sigmoid">Sigmoid</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>学习率 η <span class="val" id="lrVal">0.30</span></label>
+      <input type="range" id="rngLr" min="-3" max="0" step="0.05" value="-0.52">
+    </div>
+
+    <div class="field">
+      <label>训练速度（轮/帧） <span class="val" id="spdVal">10</span></label>
+      <input type="range" id="rngSpd" min="1" max="100" step="1" value="10">
+    </div>
+
+    <div class="field">
+      <label>🎯 挑战目标准确率</label>
+      <select id="selGoal">
+        <option value="0">关闭（自由探索）</option>
+        <option value="0.9">90%</option>
+        <option value="0.95">95%</option>
+        <option value="0.98">98%</option>
+      </select>
+      <div class="hint" id="bestRec" style="margin-top:4px"></div>
+    </div>
+
+    <div class="btns">
+      <button class="primary" id="btnRun">▶ 开始训练</button>
+      <button id="btnStep">单步</button>
+      <button id="btnReset">↺ 重置</button>
+    </div>
+
+    <div class="stats">
+      <div><span>迭代轮次 epoch</span><b id="stEpoch">0</b></div>
+      <div><span>损失 loss（交叉熵）</span><b id="stLoss">—</b></div>
+      <div><span>训练准确率</span><b id="stAcc">—</b></div>
+      <div><span>挑战状态</span><b id="stGoal">—</b></div>
+      <div><span>可学习参数个数</span><b id="stParam">—</b></div>
+    </div>
+
+    <p class="hint">💡 玩法推荐：<br>① 选「我来画数据」，亲手画一个图案（比如一个圈、一个字母）让网络学；<br>② 打开挑战目标，换不同网络结构/学习率，看谁能用最少轮数达标；<br>③ 空格键 = 开始/暂停。</p>
+  </div>
+
+  <!-- ============ 决策边界 ============ -->
+  <div class="card">
+    <h2>🗺️ 决策边界 <span class="tag">随参数学习实时演化</span></h2>
+    <canvas id="cvBoundary" width="480" height="480"></canvas>
+    <div class="legend">
+      <span><span class="dot" style="background:var(--red)"></span>类别 1 样本</span>
+      <span><span class="dot" style="background:var(--blue)"></span>类别 0 样本</span>
+      <span>背景色 = 网络预测的类别概率</span>
+    </div>
+    <p class="hint" id="boundaryHint">👆 点击平面任意位置，可在右下「前向传播明细」中查看该点的逐层计算过程。</p>
+  </div>
+
+  <!-- ============ 网络结构 ============ -->
+  <div class="card">
+    <h2>🕸️ 网络结构与权重 <span class="tag">悬停神经元看参数</span></h2>
+    <canvas id="cvNet" width="560" height="480"></canvas>
+    <div class="legend">
+      <span><span style="color:var(--red)">━</span> 正权重（兴奋）</span>
+      <span><span style="color:var(--blue)">━</span> 负权重（抑制）</span>
+      <span>线越粗 = |w| 越大；神经元颜色 = 探测点的激活值</span>
+    </div>
+  </div>
+
+  <!-- ============ 损失曲线 ============ -->
+  <div class="card">
+    <h2>📉 训练曲线 <span class="tag">梯度下降的痕迹</span></h2>
+    <canvas id="cvLoss" width="560" height="260"></canvas>
+    <div class="legend">
+      <span><span style="color:#dc2626">━</span> 损失（右轴自适应）</span>
+      <span><span style="color:#16a34a">━</span> 准确率（0~1）</span>
+    </div>
+  </div>
+
+  <!-- ============ 前向传播明细 ============ -->
+  <div class="card">
+    <h2>🔬 前向传播明细 <span class="tag">单个样本的完整计算</span></h2>
+    <div id="probeBox"><div class="probe-empty">先在左侧「决策边界」图上点击一个点</div></div>
+  </div>
+
+  <!-- ============ 原理讲解 ============ -->
+  <div class="card theory">
+    <h2>📖 背后的数学：参数是怎么被“学”出来的</h2>
+
+    <h3>1. 前向传播（Forward Propagation）</h3>
+    <p>每一层做一次线性变换 + 非线性激活，从输入 x 一路算到输出概率 p：</p>
+    <div class="formula">z⁽ˡ⁾ = W⁽ˡ⁾ · a⁽ˡ⁻¹⁾ + b⁽ˡ⁾ ,&nbsp;&nbsp; a⁽ˡ⁾ = f(z⁽ˡ⁾) ,&nbsp;&nbsp; 输出层 p = σ(z)</div>
+
+    <h3>2. 损失函数（二分类交叉熵）</h3>
+    <div class="formula">L = −(1/N) Σ [ y·ln p + (1−y)·ln(1−p) ]</div>
+
+    <h3>3. 反向传播（Backpropagation，链式法则）</h3>
+    <p>输出层的误差项非常简洁，然后逐层向前传递误差：</p>
+    <div class="formula">δ⁽ᴸ⁾ = p − y<br>δ⁽ˡ⁾ = (W⁽ˡ⁺¹⁾)ᵀ · δ⁽ˡ⁺¹⁾ ⊙ f′(z⁽ˡ⁾)</div>
+
+    <h3>4. 梯度下降更新参数</h3>
+    <p>每个参数沿着损失函数的负梯度方向走一步，步长就是学习率 η：</p>
+    <div class="formula">∂L/∂W⁽ˡ⁾ = δ⁽ˡ⁾ · (a⁽ˡ⁻¹⁾)ᵀ ,&nbsp;&nbsp; ∂L/∂b⁽ˡ⁾ = δ⁽ˡ⁾<br>W ← W − η·∂L/∂W ,&nbsp;&nbsp; b ← b − η·∂L/∂b</div>
+
+    <p style="margin-top:12px">这个页面的所有计算（矩阵乘法、激活函数求导、梯度累积）都由 <b>script.js 里不到 150 行的手写 JS</b> 完成，没有调用任何机器学习库——这正是本作业的核心：亲手实现参数学习。</p>
+  </div>
+</div>
+
+<div id="tooltip"></div>
+<div id="banner"></div>
+
+<footer>MLP 参数学习可视化 · 课程作业 · 纯原生 HTML/JS，离线可运行</footer>
+
+<script>
+"use strict";
+/* =========================================================
+ * 0. 全局状态
+ * ========================================================= */
+const S = {
+  data: [],            // 样本 [{x,y,label}]，坐标 ∈ [-1,1]
+  dataset: 'circle',
+  noise: 0.06,
+  layerSizes: [2, 6, 1], // 输入2维 → 隐藏层 → 输出1维
+  act: 'tanh',
+  lr: 0.3,
+  speed: 10,
+  W: [], b: [],          // 权重矩阵 / 偏置向量
+  epoch: 0,
+  hist: [],              // {epoch, loss, acc}
+  running: false,
+  probe: null,           // 探测点 {x,y}
+  lastFwd: null,         // 探测点的前向缓存 {zs, as, p}
+  paintClass: 1,         // 画笔类别（自定义数据集）
+  goal: 0,               // 挑战目标准确率（0=关闭）
+  achieved: false        // 挑战是否已达成
+};
+const N_SAMPLES = 200;
+
+/* =========================================================
+ * 1. 数据集生成
+ * ========================================================= */
+function randn(){ // 标准正态（Box-Muller）
+  let u=0,v=0;
+  while(u===0) u=Math.random();
+  while(v===0) v=Math.random();
+  return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);
+}
+function jitter(v){ return v + randn()*S.noise; }
+
+function genData(kind){
+  if(kind==='custom') return S.data;   // 自定义：保留用户画的点
+  const pts = [];
+  const half = N_SAMPLES/2;
+  if(kind==='circle'){
+    for(let i=0;i<N_SAMPLES;i++){
+      const x = Math.random()*2-1, y = Math.random()*2-1;
+      const r = Math.sqrt(x*x+y*y);
+      pts.push({x:jitter(x), y:jitter(y), label: r>0.55?1:0});
+    }
+  }else if(kind==='xor'){
+    for(let i=0;i<N_SAMPLES;i++){
+      const x = Math.random()*2-1, y = Math.random()*2-1;
+      pts.push({x:jitter(x), y:jitter(y), label: x*y>0?1:0});
+    }
+  }else if(kind==='moon'){
+    for(let i=0;i<half;i++){
+      const t = Math.PI*i/half;
+      pts.push({x:Math.cos(t), y:Math.sin(t), label:0});
+    }
+    for(let i=0;i<half;i++){
+      const t = Math.PI*i/half;
+      pts.push({x:1-Math.cos(t), y:-Math.sin(t)+0.5, label:1});
+    }
+    // 居中并缩放到 [-1,1]
+    for(const p of pts){
+      p.x = jitter((p.x-0.5)*1.1);
+      p.y = jitter((p.y-0.25)*1.1);
+      p.x = Math.max(-1,Math.min(1,p.x));
+      p.y = Math.max(-1,Math.min(1,p.y));
+    }
+  }else if(kind==='spiral'){
+    for(let i=0;i<half;i++){
+      const t = i/half, ang = t*2.6*Math.PI, r = t*0.95;
+      pts.push({x:jitter(r*Math.sin(ang)), y:jitter(r*Math.cos(ang)), label:0});
+    }
+    for(let i=0;i<half;i++){
+      const t = i/half, ang = t*2.6*Math.PI+Math.PI, r = t*0.95;
+      pts.push({x:jitter(r*Math.sin(ang)), y:jitter(r*Math.cos(ang)), label:1});
+    }
+  }
+  return pts;
+}
+
+/* =========================================================
+ * 2. 激活函数及其导数
+ * ========================================================= */
+const ACTS = {
+  tanh:    { f: z=>Math.tanh(z),                df: z=>{const t=Math.tanh(z);return 1-t*t;} },
+  relu:    { f: z=>z>0?z:0,                     df: z=>z>0?1:0 },
+  sigmoid: { f: z=>1/(1+Math.exp(-z)),          df: z=>{const s=1/(1+Math.exp(-z));return s*(1-s);} }
+};
+const sigmoid = z => 1/(1+Math.exp(-z));
+
+/* =========================================================
+ * 3. 网络初始化（Xavier / He）
+ *    W[l][j][i]：第 l 层第 j 个神经元对第 i 个输入的权重
+ * ========================================================= */
+function initNetwork(){
+  S.W = []; S.b = [];
+  for(let l=1; l<S.layerSizes.length; l++){
+    const nIn = S.layerSizes[l-1], nOut = S.layerSizes[l];
+    const isLast = (l === S.layerSizes.length-1);
+    let scale;
+    if(S.act==='relu' && !isLast) scale = Math.sqrt(2/nIn);        // He 初始化
+    else scale = Math.sqrt(6/(nIn+nOut));                          // Xavier 初始化
+    const Wl = [];
+    for(let j=0;j<nOut;j++){
+      const row = [];
+      for(let i=0;i<nIn;i++) row.push((Math.random()*2-1)*scale);
+      Wl.push(row);
+    }
+    S.W.push(Wl);
+    S.b.push(new Array(nOut).fill(0).map(()=> (Math.random()*2-1)*0.1));
+  }
+}
+
+/** 前向传播：返回各层 z、a 和最终概率 p */
+function forward(x, y){
+  const zs = [], as = [[x,y]];
+  let a = [x,y];
+  for(let l=0; l<S.W.length; l++){
+    const isLast = (l === S.W.length-1);
+    const z = [], aNext = [];
+    for(let j=0; j<S.W[l].length; j++){
+      let sum = S.b[l][j];
+      for(let i=0; i<a.length; i++) sum += S.W[l][j][i]*a[i];
+      z.push(sum);
+      aNext.push(isLast ? sigmoid(sum) : ACTS[S.act].f(sum));
+    }
+    zs.push(z); as.push(aNext);
+    a = aNext;
+  }
+  return { zs, as, p: a[0] };
+}
+
+/* =========================================================
+ * 4. 训练一个 epoch：全批量梯度下降 + 手写反向传播
+ * ========================================================= */
+function trainEpoch(){
+  if(!S.data.length) return;           // 自定义数据集可能还没画点
+  // 梯度累积器，形状与 W、b 相同
+  const gW = S.W.map(Wl => Wl.map(row => row.map(()=>0)));
+  const gb = S.b.map(bl => bl.map(()=>0));
+  let lossSum = 0, correct = 0;
+  const N = S.data.length;
+
+  for(const s of S.data){
+    const { zs, as, p } = forward(s.x, s.y);
+    // 交叉熵损失（p 做截断防止 log(0)）
+    const pc = Math.min(Math.max(p,1e-9), 1-1e-9);
+    lossSum += -( s.label*Math.log(pc) + (1-s.label)*Math.log(1-pc) );
+    if((p>0.5?1:0) === s.label) correct++;
+
+    // ---- 反向传播 ----
+    const L = S.W.length;
+    let delta = [ p - s.label ];               // 输出层误差（sigmoid+交叉熵的简洁形式）
+    for(let l=L-1; l>=0; l--){
+      const aPrev = as[l];                     // 本层输入（上一层激活）
+      for(let j=0; j<S.W[l].length; j++){
+        gb[l][j] += delta[j];
+        for(let i=0; i<aPrev.length; i++)
+          gW[l][j][i] += delta[j]*aPrev[i];
+      }
+      if(l>0){ // 误差传回上一层
+        const dPrev = new Array(S.W[l][0].length).fill(0);
+        for(let i=0; i<dPrev.length; i++){
+          let sum = 0;
+          for(let j=0; j<S.W[l].length; j++) sum += S.W[l][j][i]*delta[j];
+          dPrev[i] = sum * ACTS[S.act].df(zs[l-1][i]);
+        }
+        delta = dPrev;
+      }
+    }
+  }
+
+  // ---- 梯度下降更新 ----
+  for(let l=0; l<S.W.length; l++)
+    for(let j=0; j<S.W[l].length; j++){
+      S.b[l][j] -= S.lr * gb[l][j]/N;
+      for(let i=0; i<S.W[l][j].length; i++)
+        S.W[l][j][i] -= S.lr * gW[l][j][i]/N;
+    }
+
+  S.epoch++;
+  S.hist.push({ epoch:S.epoch, loss:lossSum/N, acc:correct/N });
+  if(S.hist.length > 4000) S.hist.shift();
+
+  // ---- 挑战模式：达标判定 ----
+  if(S.goal>0 && !S.achieved && correct/N >= S.goal){
+    S.achieved = true;
+    const key = 'mlp-best-'+S.dataset+'-'+S.goal;
+    const prev = parseInt(localStorage.getItem(key) || '0');
+    let msg;
+    if(!prev || S.epoch < prev){
+      localStorage.setItem(key, S.epoch);
+      msg = '🏆 新纪录！';
+    }else{
+      msg = '历史最佳 ' + prev + ' 轮';
+    }
+    showBanner('🎉 挑战达成！准确率 ≥ ' + (S.goal*100) + '%，仅用 ' + S.epoch + ' 轮。' + msg);
+    updateBest();
+  }
+}
+
+/* =========================================================
+ * 4.5 挑战横幅
+ * ========================================================= */
+let bannerTimer = null;
+function showBanner(text){
+  const el = document.getElementById('banner');
+  el.textContent = text;
+  el.classList.add('show');
+  clearTimeout(bannerTimer);
+  bannerTimer = setTimeout(()=> el.classList.remove('show'), 4500);
+}
+
+/* =========================================================
+ * 5. 渲染：决策边界
+ * ========================================================= */
+const cvB = document.getElementById('cvBoundary');
+const ctxB = cvB.getContext('2d');
+const off = document.createElement('canvas');
+const RES = 72;
+off.width = RES; off.height = RES;
+const offCtx = off.getContext('2d');
+
+function dataToPx(x, y, w, h){ return [ (x+1)/2*w, (1-(y+1)/2)*h ]; }
+
+function renderBoundary(){
+  // 低分辨率网格逐点前向 → 概率着色
+  const img = offCtx.createImageData(RES, RES);
+  for(let py=0; py<RES; py++){
+    for(let px=0; px<RES; px++){
+      const x = (px/(RES-1))*2-1;
+      const y = 1-(py/(RES-1))*2;
+      const p = forward(x, y).p;
+      const conf = Math.abs(p-0.5)*2;             // 0~1 置信度
+      const alpha = 0.08 + 0.5*conf;
+      const idx = (py*RES+px)*4;
+      if(p>0.5){ img.data[idx]=231; img.data[idx+1]=76;  img.data[idx+2]=60;  }
+      else     { img.data[idx]=59;  img.data[idx+1]=130; img.data[idx+2]=246; }
+      img.data[idx+3] = alpha*255;
+    }
+  }
+  offCtx.putImageData(img, 0, 0);
+  ctxB.imageSmoothingEnabled = true;
+  ctxB.clearRect(0, 0, cvB.width, cvB.height);
+  ctxB.drawImage(off, 0, 0, cvB.width, cvB.height);
+
+  // 样本点
+  for(const s of S.data){
+    const [px, py] = dataToPx(s.x, s.y, cvB.width, cvB.height);
+    ctxB.beginPath();
+    ctxB.arc(px, py, 4, 0, Math.PI*2);
+    ctxB.fillStyle = s.label===1 ? '#e74c3c' : '#3b82f6';
+    ctxB.fill();
+    ctxB.strokeStyle = '#fff'; ctxB.lineWidth = 1.2; ctxB.stroke();
+  }
+
+  // 探测点
+  if(S.probe){
+    const [px, py] = dataToPx(S.probe.x, S.probe.y, cvB.width, cvB.height);
+    ctxB.beginPath();
+    ctxB.arc(px, py, 8, 0, Math.PI*2);
+    ctxB.strokeStyle = '#111827'; ctxB.lineWidth = 2; ctxB.stroke();
+    ctxB.beginPath();
+    ctxB.moveTo(px-12,py); ctxB.lineTo(px+12,py);
+    ctxB.moveTo(px,py-12); ctxB.lineTo(px,py+12);
+    ctxB.stroke();
+  }
+}
+
+/* =========================================================
+ * 6. 渲染：网络结构 + 权重
+ * ========================================================= */
+const cvN = document.getElementById('cvNet');
+const ctxN = cvN.getContext('2d');
+let netNodes = [];   // 供悬停命中检测 {x,y,l,j}
+
+function actColor(v){
+  // 激活值 → 颜色：tanh/sigmoid 值域不同，统一截断到 [-1,1] 或 [0,1]
+  const t = Math.max(-1, Math.min(1, v));
+  if(t>=0) return `rgba(230,90,70,${0.15+0.75*t})`;
+  return `rgba(70,120,220,${0.15+0.75*(-t)})`;
+}
+
+function renderNetwork(){
+  const w = cvN.width, h = cvN.height;
+  ctxN.clearRect(0, 0, w, h);
+  const L = S.layerSizes.length;
+  netNodes = [];
+
+  // 计算节点坐标
+  const pos = [];
+  for(let l=0; l<L; l++){
+    const n = S.layerSizes[l];
+    const xs = 50 + (w-100) * (L===1?0.5 : l/(L-1));
+    const col = [];
+    for(let j=0; j<n; j++){
+      const ys = n===1 ? h/2 : 40 + (h-80) * j/(n-1);
+      col.push([xs, ys]);
+      netNodes.push({x:xs, y:ys, l, j});
+    }
+    pos.push(col);
+  }
+
+  // 连线（权重）
+  for(let l=0; l<L-1; l++){
+    for(let j=0; j<S.W[l].length; j++){
+      for(let i=0; i<S.W[l][j].length; i++){
+        const wgt = S.W[l][j][i];
+        const [x1,y1] = pos[l][i], [x2,y2] = pos[l+1][j];
+        const mag = Math.min(1, Math.abs(wgt)/1.5);
+        ctxN.beginPath();
+        ctxN.moveTo(x1,y1); ctxN.lineTo(x2,y2);
+        ctxN.strokeStyle = wgt>=0 ? `rgba(230,80,60,${0.12+0.7*mag})`
+                                  : `rgba(60,110,220,${0.12+0.7*mag})`;
+        ctxN.lineWidth = 0.6 + 4.5*mag;
+        ctxN.stroke();
+      }
+    }
+  }
+
+  // 节点（颜色 = 探测点激活值）
+  const acts = S.lastFwd ? S.lastFwd.as : null;
+  for(let l=0; l<L; l++){
+    for(let j=0; j<S.layerSizes[l]; j++){
+      const [x,y] = pos[l][j];
+      ctxN.beginPath();
+      ctxN.arc(x, y, 15, 0, Math.PI*2);
+      ctxN.fillStyle = acts ? actColor(acts[l][j]) : '#fff';
+      ctxN.fill();
+      ctxN.strokeStyle = '#374151'; ctxN.lineWidth = 1.5; ctxN.stroke();
+      if(acts){
+        ctxN.fillStyle = '#111827';
+        ctxN.font = '9px Consolas';
+        ctxN.textAlign = 'center'; ctxN.textBaseline = 'middle';
+        ctxN.fillText(acts[l][j].toFixed(2), x, y);
+      }
+      // 层标签
+      if(j===0){
+        ctxN.fillStyle = '#6b7280';
+        ctxN.font = '11px sans-serif';
+        ctxN.textAlign = 'center';
+        const name = l===0?'输入层':(l===L-1?'输出':'隐藏'+l);
+        ctxN.fillText(name, pos[l][0][0], 18);
+      }
+    }
+  }
+
+  // 输出概率大字
+  if(S.lastFwd){
+    ctxN.fillStyle = '#111827';
+    ctxN.font = 'bold 13px sans-serif';
+    ctxN.textAlign = 'center';
+    ctxN.fillText('p = '+S.lastFwd.p.toFixed(3), pos[L-1][0][0], pos[L-1][0][1]+34);
+  }
+}
+
+/* =========================================================
+ * 7. 渲染：损失 / 准确率曲线
+ * ========================================================= */
+const cvL = document.getElementById('cvLoss');
+const ctxL = cvL.getContext('2d');
+
+function renderLoss(){
+  const w = cvL.width, h = cvL.height;
+  ctxL.clearRect(0, 0, w, h);
+  const padL=42, padR=14, padT=14, padB=24;
+  const iw = w-padL-padR, ih = h-padT-padB;
+
+  // 网格与坐标轴
+  ctxL.strokeStyle = '#e5e7eb'; ctxL.lineWidth = 1;
+  for(let g=0; g<=4; g++){
+    const y = padT + ih*g/4;
+    ctxL.beginPath(); ctxL.moveTo(padL,y); ctxL.lineTo(w-padR,y); ctxL.stroke();
+  }
+  ctxL.strokeStyle = '#9ca3af';
+  ctxL.beginPath(); ctxL.moveTo(padL,padT); ctxL.lineTo(padL,h-padB); ctxL.lineTo(w-padR,h-padB); ctxL.stroke();
+
+  const hist = S.hist;
+  if(hist.length<2){
+    ctxL.fillStyle = '#9ca3af'; ctxL.font='13px sans-serif'; ctxL.textAlign='center';
+    ctxL.fillText('开始训练后，这里会画出损失与准确率曲线', w/2, h/2);
+    return;
+  }
+
+  const maxLoss = Math.max(...hist.map(p=>p.loss), 0.1);
+  const maxEp = hist[hist.length-1].epoch;
+  const X = ep => padL + iw*(ep-hist[0].epoch)/Math.max(1, maxEp-hist[0].epoch);
+  const Yl = ls => padT + ih*(1 - ls/maxLoss);
+  const Ya = ac => padT + ih*(1 - ac);
+
+  // 损失（红）
+  ctxL.beginPath();
+  hist.forEach((p,i)=> i===0?ctxL.moveTo(X(p.epoch),Yl(p.loss)):ctxL.lineTo(X(p.epoch),Yl(p.loss)));
+  ctxL.strokeStyle = '#dc2626'; ctxL.lineWidth = 2; ctxL.stroke();
+  // 准确率（绿）
+  ctxL.beginPath();
+  hist.forEach((p,i)=> i===0?ctxL.moveTo(X(p.epoch),Ya(p.acc)):ctxL.lineTo(X(p.epoch),Ya(p.acc)));
+  ctxL.strokeStyle = '#16a34a'; ctxL.lineWidth = 2; ctxL.stroke();
+
+  // 轴标签
+  ctxL.fillStyle = '#6b7280'; ctxL.font = '10px sans-serif'; ctxL.textAlign='right';
+  for(let g=0; g<=4; g++){
+    ctxL.fillText((maxLoss*(1-g/4)).toFixed(2), padL-4, padT+ih*g/4+3);
+  }
+  ctxL.textAlign='center';
+  ctxL.fillText('epoch →', padL+iw/2, h-6);
+  const last = hist[hist.length-1];
+  ctxL.textAlign='left';
+  ctxL.fillStyle='#dc2626';
+  ctxL.fillText('loss '+last.loss.toFixed(4), padL+6, padT+12);
+  ctxL.fillStyle='#16a34a';
+  ctxL.fillText('acc '+(last.acc*100).toFixed(1)+'%', padL+6, padT+26);
+}
+
+/* =========================================================
+ * 8. 前向传播明细面板
+ * ========================================================= */
+function renderProbe(){
+  const box = document.getElementById('probeBox');
+  if(!S.probe){
+    box.innerHTML = '<div class="probe-empty">' +
+      (S.dataset==='custom'
+        ? '自定义模式下，在左图上按住鼠标画数据点吧'
+        : '先在左侧「决策边界」图上点击一个点') + '</div>';
+    S.lastFwd = null;
+    return;
+  }
+  const fwd = forward(S.probe.x, S.probe.y);
+  S.lastFwd = fwd;
+
+  let html = '<table id="probeTable"><tr><th>层</th><th>神经元</th><th>z = Σw·a + b</th><th>激活 a = f(z)</th></tr>';
+  html += `<tr><td>输入</td><td>x₁, x₂</td><td>—</td><td>${S.probe.x.toFixed(3)}, ${S.probe.y.toFixed(3)}</td></tr>`;
+  for(let l=0; l<fwd.zs.length; l++){
+    const isLast = l===fwd.zs.length-1;
+    const name = isLast ? '输出层' : '隐藏层 '+(l+1);
+    for(let j=0; j<fwd.zs[l].length; j++){
+      html += `<tr><td>${j===0?name:''}</td><td>#${j+1}</td>`+
+              `<td>${fwd.zs[l][j].toFixed(4)}</td><td>${fwd.as[l+1][j].toFixed(4)}</td></tr>`;
+    }
+  }
+  const pred = fwd.p>0.5 ? 1 : 0;
+  const color = pred===1 ? '#e74c3c' : '#3b82f6';
+  html += `<tr><td colspan="4" style="padding-top:8px"><b>预测：类别 <span style="color:${color}">${pred}</span>（概率 p = ${fwd.p.toFixed(4)}）</b></td></tr>`;
+  html += '</table>';
+  box.innerHTML = html;
+}
+
+/* =========================================================
+ * 9. 状态栏 & 主循环
+ * ========================================================= */
+function paramCount(){
+  let n = 0;
+  for(let l=0; l<S.W.length; l++){
+    n += S.W[l].length * S.W[l][0].length + S.b[l].length;
+  }
+  return n;
+}
+
+function renderStats(){
+  document.getElementById('stEpoch').textContent = S.epoch;
+  const last = S.hist[S.hist.length-1];
+  document.getElementById('stLoss').textContent = last ? last.loss.toFixed(4) : '—';
+  document.getElementById('stAcc').textContent  = last ? (last.acc*100).toFixed(1)+'%' : '—';
+  document.getElementById('stGoal').textContent = S.goal
+    ? (S.achieved ? '✅ 已达成' : '目标 ' + (S.goal*100) + '%')
+    : '—';
+  document.getElementById('stParam').textContent = paramCount();
+}
+
+function renderAll(){
+  renderBoundary();
+  renderProbe();
+  renderNetwork();
+  renderLoss();
+  renderStats();
+}
+
+function loop(){
+  if(S.running){
+    for(let k=0; k<S.speed; k++) trainEpoch();
+    renderAll();
+  }
+  requestAnimationFrame(loop);
+}
+
+/* =========================================================
+ * 10. 交互事件
+ * ========================================================= */
+const btnRun = document.getElementById('btnRun');
+
+function resetAll(){
+  S.running = false;
+  btnRun.textContent = '▶ 开始训练';
+  S.epoch = 0;
+  S.hist = [];
+  S.achieved = false;
+  initNetwork();
+  renderAll();
+}
+
+function regenData(){
+  S.data = genData(S.dataset);
+  if(S.dataset==='custom') S.probe = null;   // 画点模式下禁用探测
+  resetAll();
+}
+
+function updateBest(){
+  const el = document.getElementById('bestRec');
+  if(!S.goal){ el.textContent = ''; return; }
+  const prev = localStorage.getItem('mlp-best-'+S.dataset+'-'+S.goal);
+  el.textContent = prev
+    ? '当前数据集历史最佳：' + prev + ' 轮达成'
+    : '还没有纪录——来创造第一个吧！';
+}
+
+document.getElementById('selData').addEventListener('change', e=>{
+  S.dataset = e.target.value;
+  const custom = S.dataset==='custom';
+  document.getElementById('paintPanel').style.display = custom ? 'block' : 'none';
+  document.getElementById('boundaryHint').textContent = custom
+    ? '🖱️ 按住左键拖动 = 连续画选中类别的点；右键 = 画另一类。画好后点「开始训练」！'
+    : '👆 点击平面任意位置，可在右下「前向传播明细」中查看该点的逐层计算过程。';
+  updateBest();
+  regenData();
+});
+document.getElementById('rngNoise').addEventListener('input', e=>{
+  S.noise = parseFloat(e.target.value);
+  document.getElementById('noiseVal').textContent = S.noise.toFixed(2);
+  regenData();
+});
+document.getElementById('txtArch').addEventListener('change', e=>{
+  const parts = e.target.value.split(',').map(s=>parseInt(s.trim())).filter(n=>n>=1&&n<=10);
+  if(parts.length===0 || parts.length>3){
+    alert('隐藏层格式：1~3 层，每层 1~10 个神经元，如 "6" 或 "6,4"');
+    e.target.value = S.layerSizes.slice(1,-1).join(',');
+    return;
+  }
+  S.layerSizes = [2, ...parts, 1];
+  resetAll();
+});
+document.getElementById('selAct').addEventListener('change', e=>{
+  S.act = e.target.value;
+  resetAll();
+});
+document.getElementById('rngLr').addEventListener('input', e=>{
+  S.lr = Math.pow(10, parseFloat(e.target.value));   // 对数刻度
+  document.getElementById('lrVal').textContent = S.lr.toFixed(3);
+});
+document.getElementById('rngSpd').addEventListener('input', e=>{
+  S.speed = parseInt(e.target.value);
+  document.getElementById('spdVal').textContent = S.speed;
+});
+
+btnRun.addEventListener('click', ()=>{
+  S.running = !S.running;
+  btnRun.textContent = S.running ? '⏸ 暂停' : '▶ 继续训练';
+});
+document.getElementById('btnStep').addEventListener('click', ()=>{
+  trainEpoch(); renderAll();
+});
+document.getElementById('btnReset').addEventListener('click', resetAll);
+
+// 挑战目标
+document.getElementById('selGoal').addEventListener('change', e=>{
+  S.goal = parseFloat(e.target.value);
+  S.achieved = false;
+  updateBest();
+  renderStats();
+});
+
+// ---- 自定义画点 ----
+const btnRed = document.getElementById('btnPaintRed');
+const btnBlue = document.getElementById('btnPaintBlue');
+btnRed.addEventListener('click', ()=>{
+  S.paintClass = 1;
+  btnRed.classList.add('paint-on'); btnBlue.classList.remove('paint-on');
+});
+btnBlue.addEventListener('click', ()=>{
+  S.paintClass = 0;
+  btnBlue.classList.add('paint-on'); btnRed.classList.remove('paint-on');
+});
+document.getElementById('btnClearPts').addEventListener('click', ()=>{
+  S.data = [];
+  resetAll();
+});
+
+function cvToData(e){
+  const rect = cvB.getBoundingClientRect();
+  const px = (e.clientX-rect.left)/rect.width * cvB.width;
+  const py = (e.clientY-rect.top)/rect.height * cvB.height;
+  return {
+    x: Math.max(-1, Math.min(1, (px/cvB.width)*2-1)),
+    y: Math.max(-1, Math.min(1, 1-(py/cvB.height)*2))
+  };
+}
+
+let painting = false, lastPt = null;
+cvB.addEventListener('mousedown', e=>{
+  if(S.dataset!=='custom') return;
+  painting = true; lastPt = null;
+  const p = cvToData(e);
+  const label = (e.button===2) ? 1-S.paintClass : S.paintClass;
+  S.data.push({x:p.x, y:p.y, label});
+  lastPt = p;
+  renderAll();
+});
+window.addEventListener('mouseup', ()=> painting=false);
+cvB.addEventListener('mousemove', e=>{
+  if(!painting) return;
+  const p = cvToData(e);
+  if(lastPt && Math.hypot(p.x-lastPt.x, p.y-lastPt.y) < 0.04) return;  // 去抖：点距过近不加
+  lastPt = p;
+  S.data.push({x:p.x, y:p.y, label:S.paintClass});
+  renderAll();
+});
+cvB.addEventListener('contextmenu', e=>{
+  if(S.dataset==='custom') e.preventDefault();
+});
+
+// 空格键 = 开始/暂停
+document.addEventListener('keydown', e=>{
+  if(e.code==='Space' && !/INPUT|SELECT|TEXTAREA|BUTTON/.test(document.activeElement.tagName)){
+    e.preventDefault();
+    btnRun.click();
+  }
+});
+
+// 决策边界点击 → 设置探测点（自定义模式下点击是画点，已在上面的 mousedown 处理）
+cvB.addEventListener('click', e=>{
+  if(S.dataset==='custom') return;
+  const p = cvToData(e);
+  S.probe = { x:p.x, y:p.y };
+  renderAll();
+});
+
+// 网络图悬停 → 显示该神经元的参数
+const tip = document.getElementById('tooltip');
+cvN.addEventListener('mousemove', e=>{
+  const rect = cvN.getBoundingClientRect();
+  const mx = (e.clientX-rect.left)/rect.width * cvN.width;
+  const my = (e.clientY-rect.top)/rect.height * cvN.height;
+  const hit = netNodes.find(nd => Math.hypot(nd.x-mx, nd.y-my) < 18);
+  if(!hit || hit.l===0){ tip.style.display='none'; return; }
+  const l = hit.l-1, j = hit.j;
+  let html = `<b>${hit.l===S.layerSizes.length-1?'输出神经元':'隐藏神经元 '+(j+1)}</b><br>`+
+             `偏置 b = ${S.b[l][j].toFixed(4)}<br>权重 w = [`+
+             S.W[l][j].map(w=>w.toFixed(3)).join(', ') + ']';
+  if(S.lastFwd){
+    html += `<br>z = ${S.lastFwd.zs[l][j].toFixed(4)}，a = ${S.lastFwd.as[l+1][j].toFixed(4)}`;
+  }
+  tip.innerHTML = html;
+  tip.style.display = 'block';
+  tip.style.left = (e.clientX+14)+'px';
+  tip.style.top  = (e.clientY+10)+'px';
+});
+cvN.addEventListener('mouseleave', ()=> tip.style.display='none');
+
+/* =========================================================
+ * 启动
+ * ========================================================= */
+S.data = genData(S.dataset);
+initNetwork();
+renderAll();
+loop();
+</script>
+</body>
+</html>
