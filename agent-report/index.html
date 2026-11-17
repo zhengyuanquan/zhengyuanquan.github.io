@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>征源权 的 AI Agent 使用报告</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0a0a12;
+    --bg-card: rgba(255,255,255,0.04);
+    --border: rgba(255,255,255,0.09);
+    --text: #e8e8f0;
+    --text-dim: #9a9ab0;
+    --c1: #7c6cff;
+    --c2: #4ecdc4;
+    --c3: #ff6b9d;
+    --c4: #ffa94d;
+  }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    overflow-x: hidden;
+    line-height: 1.7;
+  }
+  /* 背景光斑 */
+  .glow { position: fixed; border-radius: 50%; filter: blur(120px); opacity: .35; z-index: 0; pointer-events: none; }
+  .glow-1 { width: 480px; height: 480px; background: #7c6cff; top: -160px; left: -120px; }
+  .glow-2 { width: 420px; height: 420px; background: #4ecdc4; top: 40%; right: -160px; }
+  .glow-3 { width: 380px; height: 380px; background: #ff6b9d; bottom: -120px; left: 20%; opacity: .2; }
+  .wrap { position: relative; z-index: 1; max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+
+  /* Hero */
+  header { min-height: 92vh; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 80px 24px 60px; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 8px 18px; border: 1px solid var(--border); border-radius: 999px;
+    background: var(--bg-card); backdrop-filter: blur(8px);
+    font-size: 13px; color: var(--text-dim); letter-spacing: 1px;
+  }
+  .badge .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c2); box-shadow: 0 0 12px var(--c2); }
+  h1 {
+    margin-top: 28px; font-size: clamp(38px, 7vw, 72px); font-weight: 800; line-height: 1.15; letter-spacing: 2px;
+    background: linear-gradient(120deg, #fff 20%, var(--c1) 55%, var(--c2) 85%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .sub { margin-top: 22px; font-size: clamp(15px, 2.4vw, 19px); color: var(--text-dim); max-width: 640px; }
+  .scroll-hint { margin-top: 64px; color: var(--text-dim); font-size: 13px; animation: bob 2s ease-in-out infinite; }
+  @keyframes bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(8px); } }
+
+  section { padding: 90px 0; }
+  .sec-title { font-size: clamp(26px, 4.5vw, 38px); font-weight: 700; margin-bottom: 12px; }
+  .sec-title em { font-style: normal; color: var(--c2); }
+  .sec-desc { color: var(--text-dim); margin-bottom: 48px; max-width: 620px; }
+
+  /* 数据概览 */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 18px; }
+  .stat {
+    padding: 30px 26px; border-radius: 18px; border: 1px solid var(--border);
+    background: var(--bg-card); backdrop-filter: blur(10px);
+    transition: transform .3s, border-color .3s;
+  }
+  .stat:hover { transform: translateY(-6px); border-color: rgba(124,108,255,.5); }
+  .stat .num { font-size: 44px; font-weight: 800; background: linear-gradient(120deg, var(--c1), var(--c2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .stat .label { margin-top: 6px; color: var(--text-dim); font-size: 14px; }
+
+  /* Agent 卡片 */
+  .agents { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 22px; }
+  .agent-card {
+    position: relative; padding: 30px; border-radius: 20px; overflow: hidden;
+    border: 1px solid var(--border); background: var(--bg-card); backdrop-filter: blur(10px);
+    transition: transform .3s, border-color .3s, box-shadow .3s;
+  }
+  .agent-card:hover { transform: translateY(-8px); box-shadow: 0 20px 50px rgba(0,0,0,.45); }
+  .agent-card::before {
+    content: ""; position: absolute; inset: 0 0 auto 0; height: 3px;
+    background: linear-gradient(90deg, var(--ac, var(--c1)), transparent);
+  }
+  .agent-head { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+  .avatar {
+    width: 52px; height: 52px; border-radius: 14px; display: flex; align-items: center; justify-content: center;
+    font-size: 22px; font-weight: 800; color: #fff;
+    background: linear-gradient(135deg, var(--ac, var(--c1)), var(--ac2, var(--c2)));
+    box-shadow: 0 6px 18px rgba(0,0,0,.4);
+  }
+  .agent-head h3 { font-size: 20px; }
+  .agent-head p { font-size: 12.5px; color: var(--text-dim); }
+  .tags { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  .tag { font-size: 12px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-dim); background: rgba(255,255,255,.03); }
+  .agent-card .what { font-size: 14px; color: var(--text-dim); }
+  .agent-card .effect { margin-top: 14px; padding: 12px 14px; border-radius: 12px; background: rgba(78,205,196,.08); border: 1px solid rgba(78,205,196,.2); font-size: 13.5px; }
+  .agent-card .effect b { color: var(--c2); font-weight: 600; }
+
+  /* 时间线 */
+  .timeline { position: relative; padding-left: 34px; }
+  .timeline::before { content: ""; position: absolute; left: 8px; top: 6px; bottom: 6px; width: 2px; background: linear-gradient(180deg, var(--c1), var(--c2), var(--c3)); border-radius: 2px; }
+  .tl-item { position: relative; margin-bottom: 42px; }
+  .tl-item::before {
+    content: ""; position: absolute; left: -32px; top: 6px; width: 14px; height: 14px; border-radius: 50%;
+    background: var(--bg); border: 3px solid var(--tc, var(--c1)); box-shadow: 0 0 14px var(--tc, var(--c1));
+  }
+  .tl-date { font-size: 13px; color: var(--tc, var(--c1)); font-weight: 600; letter-spacing: 1px; }
+  .tl-item h3 { margin: 6px 0 10px; font-size: 19px; }
+  .tl-body {
+    padding: 20px 22px; border-radius: 16px; border: 1px solid var(--border);
+    background: var(--bg-card); backdrop-filter: blur(10px); font-size: 14.5px; color: var(--text-dim);
+  }
+  .tl-body .flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; font-size: 13px; }
+  .flow span { padding: 5px 12px; border-radius: 8px; background: rgba(255,255,255,.05); border: 1px solid var(--border); }
+  .flow i { color: var(--tc, var(--c1)); font-style: normal; }
+
+  /* 感悟 */
+  .thoughts { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; }
+  .thought { padding: 26px; border-radius: 18px; border: 1px solid var(--border); background: var(--bg-card); }
+  .thought .icon { font-size: 26px; }
+  .thought h4 { margin: 12px 0 8px; font-size: 17px; }
+  .thought p { font-size: 14px; color: var(--text-dim); }
+
+  footer { padding: 50px 0 60px; text-align: center; color: var(--text-dim); font-size: 13.5px; border-top: 1px solid var(--border); }
+  footer b { color: var(--text); }
+
+  .reveal { opacity: 0; transform: translateY(28px); transition: opacity .7s ease, transform .7s ease; }
+  .reveal.show { opacity: 1; transform: none; }
+
+  @media (max-width: 640px) { section { padding: 64px 0; } }
+</style>
+</head>
+<body>
+  <div class="glow glow-1"></div>
+  <div class="glow glow-2"></div>
+  <div class="glow glow-3"></div>
+
+  <header>
+    <div class="badge"><span class="dot"></span>AI 课程作业 · 个人网站</div>
+    <h1>征源权 的 AI Agent<br>使用报告</h1>
+    <p class="sub">苏州大学 未来科学与工程学院 · 2026 级人工智能专业<br>记录我入学以来用过的 AI Agent、用它们做的事，以及它们带来的真实改变</p>
+    <div class="scroll-hint">↓ 向下滚动查看</div>
+  </header>
+
+  <div class="wrap">
+
+    <section>
+      <h2 class="sec-title reveal">一图看懂 <em>我的 AI 使用概况</em></h2>
+      <p class="sec-desc reveal">从 2026 年 9 月入学到现在，AI Agent 已经渗透到我学习和做项目的几乎每个环节。</p>
+      <div class="stats">
+        <div class="stat reveal"><div class="num" data-n="4">0</div><div class="label">正在使用的 AI Agent</div></div>
+        <div class="stat reveal"><div class="num" data-n="5">0</div><div class="label">覆盖场景：编程 / 学习 / 文档 / 项目 / 生活</div></div>
+        <div class="stat reveal"><div class="num" data-n="10" data-suffix=" 分钟">0</div><div class="label">最快一次排障：鸿蒙项目网络问题定位</div></div>
+        <div class="stat reveal"><div class="num" data-n="60" data-suffix=" 天+">0</div><div class="label">与 AI 协作的天数</div></div>
+      </div>
+    </section>
+
+    <section>
+      <h2 class="sec-title reveal">我用过的 <em>AI Agent</em></h2>
+      <p class="sec-desc reveal">每一款都有自己的性格和最擅长的活儿，我把它们用在不同的地方。</p>
+      <div class="agents">
+
+        <div class="agent-card reveal" style="--ac:#7c6cff; --ac2:#4e9dff;">
+          <div class="agent-head">
+            <div class="avatar">W</div>
+            <div><h3>WorkBuddy</h3><p>腾讯 · 全栈 AI 工作伙伴</p></div>
+          </div>
+          <div class="tags"><span class="tag">项目调试</span><span class="tag">代码分析</span><span class="tag">环境排障</span></div>
+          <p class="what">我的鸿蒙开发实战搭子。做「黑马云音乐」App 时帮我对着源码逐层排查问题，还能直接操作我的电脑运行服务、修改配置。</p>
+          <div class="effect"><b>效果：</b>App「互动广场」页面一直空白，WorkBuddy 10 分钟内定位到两个根因——后端服务没启动、代码里服务器 IP 写死了教程电脑的地址。修复后数据全部恢复。</div>
+        </div>
+
+        <div class="agent-card reveal" style="--ac:#4ecdc4; --ac2:#44a08d;">
+          <div class="agent-head">
+            <div class="avatar">D</div>
+            <div><h3>DeepSeek</h3><p>深度求索 · 代码学习助手</p></div>
+          </div>
+          <div class="tags"><span class="tag">语法讲解</span><span class="tag">报错解读</span><span class="tag">算法思路</span></div>
+          <p class="what">主要用来啃编程学习中的硬骨头：ArkTS / ArkUI 语法不懂就问，报错信息贴给它让它翻译成"人话"。</p>
+          <div class="effect"><b>效果：</b>把看不懂的报错变成看得懂的解释，学鸿蒙开发少走了很多弯路，代码理解效率明显提升。</div>
+        </div>
+
+        <div class="agent-card reveal" style="--ac:#ff6b9d; --ac2:#ffa94d;">
+          <div class="agent-head">
+            <div class="avatar">豆</div>
+            <div><h3>豆包</h3><p>字节跳动 · 日常学习搭子</p></div>
+          </div>
+          <div class="tags"><span class="tag">英语润色</span><span class="tag">日常问答</span><span class="tag">翻译总结</span></div>
+          <p class="what">处理日常学习里的零碎需求：英语课的 pre 文案润色、课后练习、随手的翻译和知识点问答。</p>
+          <div class="effect"><b>效果：</b>英语作业和课堂展示的准备时间明显缩短，表达更地道，随问随答很省心。</div>
+        </div>
+
+        <div class="agent-card reveal" style="--ac:#ffa94d; --ac2:#ff6b6b;">
+          <div class="agent-head">
+            <div class="avatar">K</div>
+            <div><h3>Kimi</h3><p>月之暗面 · 长文档阅读器</p></div>
+          </div>
+          <div class="tags"><span class="tag">长文速读</span><span class="tag">要点提取</span><span class="tag">资料整理</span></div>
+          <p class="what">专门对付长文档：几十页的学生手册、课程资料 PDF 丢给它，让它提取重点、整理成清单。</p>
+          <div class="effect"><b>效果：</b>以前要翻半天的文档，现在几分钟就能抓住重点，开学季的各种通知再没漏过关键信息。</div>
+        </div>
+
+      </div>
+    </section>
+
+    <section>
+      <h2 class="sec-title reveal">印象最深的 <em>三次实战</em></h2>
+      <p class="sec-desc reveal">不是"用了什么功能"的流水账，而是真正解决问题的三个瞬间。</p>
+      <div class="timeline">
+
+        <div class="tl-item reveal" style="--tc:#7c6cff;">
+          <div class="tl-date">2026.10 · WorkBuddy</div>
+          <h3>黑马云音乐 App 数据"复活"记</h3>
+          <div class="tl-body">
+            课程实战项目「黑马云音乐」的"互动广场"页面始终空白，只显示"到底了~"。我本以为代码写错了，WorkBuddy 检查后告诉我：界面没问题，是数据没来。它读源码找到接口配置文件，发现服务器 IP 是教程作者电脑的地址；又发现本地后端服务根本没启动。启动服务、改成我电脑的 IP，页面立刻刷出了完整数据。
+            <div class="flow"><span>发现问题</span><i>→</i><span>源码定位</span><i>→</i><span>启动服务 + 改 IP</span><i>→</i><span>✅ 数据恢复</span></div>
+          </div>
+        </div>
+
+        <div class="tl-item reveal" style="--tc:#4ecdc4;">
+          <div class="tl-date">2026.09 ~ 10 · DeepSeek</div>
+          <h3>从零开始啃鸿蒙开发</h3>
+          <div class="tl-body">
+            刚装 DevEco Studio 时连项目结构都看不懂。我把教材里的 ArkTS 代码片段逐段发给 DeepSeek，让它用"给初学者讲"的方式解释装饰器、状态管理和布局语法，遇到编译报错直接把报错贴过去。慢慢地，我能独立看懂工程目录，也知道出问题该先查哪里。
+            <div class="flow"><span>看不懂代码</span><i>→</i><span>逐段提问</span><i>→</i><span>报错翻译</span><i>→</i><span>✅ 独立上手</span></div>
+          </div>
+        </div>
+
+        <div class="tl-item reveal" style="--tc:#ff6b9d;">
+          <div class="tl-date">2026.09 · 豆包 & Kimi</div>
+          <h3>开学季的"信息急救"</h3>
+          <div class="tl-body">
+            开学资料爆炸：学生手册、课程说明、各种通知 PDF 几十页起步。我用 Kimi 批量速读这些文档，提取报到流程、选课规则等关键信息；英语课的 pre 文稿则用豆包润色表达。迎新季忙得脚不沾地，但没漏掉任何一条重要通知。
+            <div class="flow"><span>资料爆炸</span><i>→</i><span>AI 速读提取</span><i>→</i><span>清单化整理</span><i>→</i><span>✅ 从容开学</span></div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <section>
+      <h2 class="sec-title reveal">我的 <em>三点感悟</em></h2>
+      <p class="sec-desc reveal">用了两个月 AI Agent，最深的体会不是"它好强"，而是"原来要这样用它"。</p>
+      <div class="thoughts">
+        <div class="thought reveal">
+          <div class="icon">🧭</div>
+          <h4>Agent 是放大器，不是替代品</h4>
+          <p>它放大的是你本来就有的思路。我连"服务器要启动"都不知道时，AI 也救不了我；学了网络基础之后，它就成了效率神器。先有自己的知识框架，AI 才能嵌进去。</p>
+        </div>
+        <div class="thought reveal">
+          <div class="icon">💬</div>
+          <h4>提问质量决定产出质量</h4>
+          <p>"为什么不行"只能得到安慰，"这是我的报错信息、环境版本和目录结构"才能得到答案。学会描述问题，是我用 AI 这段时间最大的收获。</p>
+        </div>
+        <div class="thought reveal">
+          <div class="icon">🔍</div>
+          <h4>永远保留交叉验证的习惯</h4>
+          <p>AI 也会一本正经地胡说。关键配置、重要数据，我会让它给出处、或自己动手验证一遍。信任，但要核实。</p>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <footer>
+    <p><b>征源权</b> · 苏州大学未来科学与工程学院 2026 级人工智能专业</p>
+    <p style="margin-top:6px;">本网站由本人设计，WorkBuddy 协助搭建 · 2026 年 10 月</p>
+  </footer>
+
+<script>
+  // 滚动显现
+  const io = new IntersectionObserver(es => es.forEach(e => {
+    if (e.isIntersecting) { e.target.classList.add('show'); io.unobserve(e.target); }
+  }), { threshold: .12 });
+  document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+
+  // 数字滚动
+  const nio = new IntersectionObserver(es => es.forEach(e => {
+    if (!e.isIntersecting) return;
+    const el = e.target, n = +el.dataset.n, suf = el.dataset.suffix || '';
+    let t0 = null;
+    const step = ts => {
+      if (!t0) t0 = ts;
+      const p = Math.min((ts - t0) / 1200, 1);
+      el.textContent = Math.round(n * (1 - Math.pow(1 - p, 3))) + suf;
+      if (p < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+    nio.unobserve(el);
+  }), { threshold: .5 });
+  document.querySelectorAll('.num').forEach(el => nio.observe(el));
+</script>
+</body>
+</html>
