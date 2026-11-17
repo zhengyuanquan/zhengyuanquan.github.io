@@ -807,13 +807,13 @@ function cvToData(e){
   };
 }
 
-let painting = false, lastPt = null;
+let painting = false, lastPt = null, paintingLabel = 1;
 cvB.addEventListener('mousedown', e=>{
   if(S.dataset!=='custom') return;
   painting = true; lastPt = null;
+  paintingLabel = (e.button===2) ? 1-S.paintClass : S.paintClass;  // 右键画相反类别，整次拖动都沿用
   const p = cvToData(e);
-  const label = (e.button===2) ? 1-S.paintClass : S.paintClass;
-  S.data.push({x:p.x, y:p.y, label});
+  S.data.push({x:p.x, y:p.y, label:paintingLabel});
   lastPt = p;
   renderAll();
 });
@@ -823,7 +823,7 @@ cvB.addEventListener('mousemove', e=>{
   const p = cvToData(e);
   if(lastPt && Math.hypot(p.x-lastPt.x, p.y-lastPt.y) < 0.04) return;  // 去抖：点距过近不加
   lastPt = p;
-  S.data.push({x:p.x, y:p.y, label:S.paintClass});
+  S.data.push({x:p.x, y:p.y, label:paintingLabel});
   renderAll();
 });
 cvB.addEventListener('contextmenu', e=>{
